@@ -496,17 +496,44 @@ async function loadDiaryEntries() {
   }
 }
 
+function todayRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+  return { start, end };
+}
+
 async function saveDiaryToSupabase(entry) {
-  const { error } = await sb
+  const { start, end } = todayRange();
+
+  // Check if today's entry already exists
+  const { data: existing } = await sb
     .from('diary_entries')
-    .insert({
-      user_id: currentUser.id,
-      summary: entry.summary,
-      question: entry.question,
-      letter: entry.letter,
-      child_age: entry.age || null,
-      topics: entry.topics || []
-    });
+    .select('id')
+    .eq('user_id', currentUser.id)
+    .gte('created_at', start)
+    .lt('created_at', end)
+    .limit(1);
+
+  const row = {
+    summary: entry.summary,
+    question: entry.question,
+    letter: entry.letter,
+    child_age: entry.age || null,
+    topics: entry.topics || []
+  };
+
+  let error;
+  if (existing && existing.length > 0) {
+    ({ error } = await sb
+      .from('diary_entries')
+      .update(row)
+      .eq('id', existing[0].id));
+  } else {
+    ({ error } = await sb
+      .from('diary_entries')
+      .insert({ user_id: currentUser.id, ...row }));
+  }
 
   if (error) console.warn('diary save failed', error);
 }
@@ -556,7 +583,7 @@ function showTyping() {
 function removeTyping() { const t=document.getElementById('typing'); if(t)t.remove(); }
 
 function detectContext(text) {
-  const m = text.match(/(\d+)\s*[ヶヵ]月|生後\s*(\d+)/);
+  const m = text.match(/(\d+)\s*[ヶヵケカかが]月|生後\s*(\d+)/);
   if(m) {
     childAge = parseInt(m[1]||m[2]);
     document.getElementById('ageBadge').textContent = `👶 生後${childAge}ヶ月`;
@@ -606,7 +633,7 @@ async function sendMessage() {
     appendMsg('ai', reply);
     history.push({role:'assistant', content:reply});
     detectContext(reply);
-    if(history.length >= 4 && history.length % 4 === 0) await autoSave();
+    if(history.length >= 2) await autoSave();
   } catch(e) {
     removeTyping();
     appendMsg('ai', `エラーが起きました: ${e.message}`);
@@ -618,12 +645,12 @@ async function sendMessage() {
 
 /* ========== Diary Save ========== */
 async function autoSave() {
-  const recent = history.slice(-6);
-  const prompt = `以下の育児相談の会話を日記エントリにしてください。JSONのみで返答（マークダウン不要）：
+  const conv = history.map(m=>`${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n');
+  const prompt = `以下は今日の育児相談の会話すべてです。1日分の日記エントリとしてまとめてください。JSONのみで返答（マークダウン不要）：
 {"summary":"この日感じたこと（100文字以内、親目線）","question":"今日聞いたこと（30文字以内）","letter":"子どもへの一言（40文字以内、未来の子どもへ）"}
 
 会話：
-${recent.map(m=>`${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n')}`;
+${conv}`;
 
   try {
     const raw = await callClaude([{role:'user',content:prompt}], 400);
@@ -635,12 +662,8 @@ ${recent.map(m=>`${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n')}`;
       ...entry
     };
 
-    // Save to Supabase
     await saveDiaryToSupabase(diaryData);
-
-    // Reload from DB to stay in sync
     await loadDiaryEntries();
-    topics.clear();
   } catch(e){ console.warn('diary save failed', e); }
 }
 
