@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mamalog</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --cream: #FAF7F2;
+    --warm-white: #FFFDF9;
+    --blush: #F2E8DF;
+    --rose: #D4A89A;
+    --rose-deep: #B8756A;
+    --sage: #8FA68A;
+    --text: #3D3530;
+    --text-light: #8A7A74;
+    --border: #E8DDD5;
+    --ai-bg: #F5F0EB;
+  }
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* AUTH SCREEN */
+  #authScreen {
+    position: fixed; inset: 0;
+    background: var(--cream);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 40px 24px;
+  }
+  #authScreen.hidden { display: none; }
+  .auth-card {
+    background: var(--warm-white);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px 32px;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+  }
+  .auth-logo {
+    font-family: 'DM Serif Display', serif;
+    font-size: 32px;
+    color: var(--rose-deep);
+    margin-bottom: 6px;
+  }
+  .auth-logo span { font-style: italic; }
+  .auth-tagline {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 32px;
+    line-height: 1.8;
+  }
+  .auth-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--sage);
+    text-align: left;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .auth-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    background: var(--cream);
+    color: var(--text);
+    outline: none;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .auth-input:focus { border-color: var(--rose); }
+  .auth-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--rose-deep);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .auth-btn:hover { background: #a0635a; }
+  .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .auth-error {
+    font-size: 12px;
+    color: #c0392b;
+    margin-bottom: 12px;
+    min-height: 18px;
+  }
+  .auth-toggle {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-top: 18px;
+    line-height: 1.7;
+  }
+  .auth-toggle a {
+    color: var(--rose-deep);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .auth-toggle a:hover { text-decoration: underline; }
+
+  /* MAIN APP */
+  #app { display: none; flex: 1; flex-direction: column; overflow: hidden; height: 100vh; }
+  #app.visible { display: flex; }
+
+  .header {
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--rose-deep); }
+  .logo span { font-style: italic; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .age-badge {
+    font-size: 11px;
+    background: var(--blush);
+    color: var(--rose-deep);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .logout-btn {
+    font-size: 11px;
+    color: var(--text-light);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    transition: all 0.2s;
+  }
+  .logout-btn:hover { border-color: var(--rose); color: var(--rose-deep); }
+
+  .tab-nav {
+    display: flex;
+    background: var(--warm-white);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab {
+    flex: 1; padding: 10px; text-align: center;
+    font-size: 12px; color: var(--text-light);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all 0.2s; letter-spacing: 0.05em;
+  }
+  .tab.active { color: var(--rose-deep); border-bottom-color: var(--rose-deep); font-weight: 500; }
+
+  .view { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .view.active { display: flex; }
+
+  /* CHAT */
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 20px 16px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .msg { display: flex; gap: 10px; animation: fadeUp 0.3s ease; }
+  .msg.user { flex-direction: row-reverse; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    flex-shrink: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 15px; background: var(--blush);
+  }
+  .msg.user .avatar { background: var(--rose); }
+  .bubble {
+    max-width: 72%; padding: 12px 15px;
+    border-radius: 16px; font-size: 13.5px; line-height: 1.7;
+  }
+  .msg.ai .bubble { background: var(--ai-bg); border-top-left-radius: 4px; }
+  .msg.user .bubble { background: var(--rose-deep); border-top-right-radius: 4px; color: white; }
+  .typing-dots { display:flex; gap:4px; padding:4px 0; align-items:center; }
+  .dot { width:6px;height:6px;border-radius:50%;background:var(--rose);animation:bounce 1.2s infinite; }
+  .dot:nth-child(2){animation-delay:.2s} .dot:nth-child(3){animation-delay:.4s}
+  @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+  .input-area {
+    background: var(--warm-white);
+    border-top: 1px solid var(--border);
+    padding: 14px 16px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    display: flex; gap: 12px; align-items: flex-end;
+    flex-shrink: 0;
+  }
+  textarea {
+    flex: 1; border: 1px solid var(--border); border-radius: 20px;
+    padding: 14px 18px; font-family: 'Noto Sans JP', sans-serif;
+    font-size: 16px; resize: none; outline: none;
+    background: var(--cream); color: var(--text);
+    line-height: 1.6; min-height: 52px; max-height: 120px; transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--rose); }
+  textarea::placeholder { color: var(--text-light); }
+  .send-btn {
+    width:52px;height:52px;border-radius:50%;background:var(--rose-deep);
+    border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:all 0.2s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .send-btn:hover{background:#a0635a}
+  .send-btn:active{transform:scale(0.93)}
+  .send-btn:disabled{background:var(--border);cursor:not-allowed;transform:none}
+  .send-btn svg{fill:white;width:20px;height:20px}
+
+  /* DIARY */
+  .diary-scroll { flex:1; overflow-y:auto; padding:20px 16px; }
+  .diary-empty { text-align:center; padding:60px 20px; color:var(--text-light); }
+  .diary-empty .icon{font-size:40px;margin-bottom:12px}
+  .diary-empty p{font-size:13px;line-height:1.8}
+  .save-btn {
+    width:100%;padding:10px;background:var(--blush);
+    border:1px dashed var(--rose);border-radius:8px;
+    color:var(--rose-deep);font-family:'Noto Sans JP',sans-serif;
+    font-size:12px;cursor:pointer;margin-bottom:16px;transition:background .2s;
+  }
+  .save-btn:hover{background:#EDD8CE}
+  .save-btn:disabled{opacity:.6;cursor:not-allowed}
+  .diary-entry {
+    background:var(--warm-white);border:1px solid var(--border);
+    border-radius:12px;padding:18px;margin-bottom:16px;animation:fadeUp 0.3s ease;
+  }
+  .entry-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px}
+  .entry-date{font-family:'DM Serif Display',serif;font-size:15px;color:var(--rose-deep)}
+  .entry-age{font-size:11px;color:var(--text-light);background:var(--blush);padding:2px 8px;border-radius:10px}
+  .entry-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .tag{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--blush);color:var(--rose-deep)}
+  .entry-summary{font-family:'Noto Serif JP',serif;font-size:13px;line-height:1.9;color:var(--text);border-left:2px solid var(--rose);padding-left:12px;margin-bottom:10px;font-weight:300}
+  .entry-q{font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:10px}
+  .entry-q strong{display:block;font-size:10px;letter-spacing:.05em;color:var(--sage);margin-bottom:4px;font-family:'Noto Sans JP',sans-serif;font-weight:500}
+  .letter-box{margin-top:10px;padding:12px 14px;background:#FFF9F5;border:1px solid var(--border);border-radius:8px;font-family:'Noto Serif JP',serif;font-size:12px;line-height:2;color:var(--text-light);font-weight:300}
+  .letter-label{font-size:10px;letter-spacing:.1em;color:var(--sage);margin-bottom:4px;font-style:normal;font-family:'Noto Sans JP',sans-serif;font-weight:500}
+
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo"><span>mama</span>log</div>
+    <p class="auth-tagline">育児のこと、<br>ここに残そう。</p>
+    <form id="authForm" data-mode="login" onsubmit="handleAuth(event)">
+      <div class="auth-label">メールアドレス</div>
+      <input type="email" id="authEmail" class="auth-input" placeholder="mail@example.com" required>
+      <div class="auth-label">パスワード</div>
+      <input type="password" id="authPassword" class="auth-input" placeholder="6文字以上" required minlength="6">
+      <div id="authError" class="auth-error"></div>
+      <button type="submit" id="authSubmitBtn" class="auth-btn">ログイン</button>
+    </form>
+    <p id="authToggle" class="auth-toggle">
+      初めての方は <a href="#" onclick="toggleAuthMode();return false">新規登録</a>
+    </p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="header">
+    <div class="logo"><span>mama</span>log</div>
+    <div class="header-right">
+      <span class="age-badge" id="ageBadge">👶 月齢未設定</span>
+      <button class="logout-btn" onclick="logout()">ログアウト</button>
+    </div>
+  </div>
+  <div class="tab-nav">
+    <div class="tab active" id="tabChat" onclick="switchTab('chat')">💬 話す</div>
+    <div class="tab" id="tabDiary" onclick="switchTab('diary')">📖 日記</div>
+  </div>
+
+  <div class="view active" id="chatView">
+    <div class="messages" id="messages">
+      <div class="msg ai">
+        <div class="avatar">🌱</div>
+        <div class="bubble">こんにちは。育児のこと、なんでも話しかけてください。<br>質問でも、不安なことでも、ただのつぶやきでも。<br><br>お子さんは今、何ヶ月ですか？</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <textarea id="userInput" rows="1" placeholder="泣き止まないとか、眠れないとか、なんでも…"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg width="16" height="16" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="view" id="diaryView">
+    <div class="diary-scroll" id="diaryScroll">
+      <div class="diary-empty">
+        <div class="icon">🌸</div>
+        <p>会話すると自動で日記になります。<br><br>まず「話す」タブで<br>話しかけてみて。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========== Supabase ========== */
+const SUPABASE_URL = 'https://jgbrrumlykotyfmzewqo.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8codbQvWELeOgEMqofoLew_dDazNRP_';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ========== Claude API ========== */
+const SYSTEM = `あなたは「mamalog」という育児日記アプリのAIです。パパ・ママの育児の悩みや不安、喜びに寄り添います。
+
+大切にすること：
+- まず共感する。「それは不安だよね」「大変だったね」と受け止める
+- 医療的な内容には「心配なら小児科へ」を添える
+- 難しい言葉は使わない。短く、やさしく
+- 子どもの月齢を把握して文脈に合わせる`;
+
+let apiKey = localStorage.getItem('mamalog_api_key') || '';
+if (!apiKey) {
+  apiKey = prompt('Anthropic APIキーを入力してください:') || '';
+  if (apiKey) localStorage.setItem('mamalog_api_key', apiKey);
+}
+
+/* ========== State ========== */
+let history = [];
+let diaryEntries = [];
+let childAge = null;
+let topics = new Set();
+let busy = false;
+let currentUser = null;
+
+/* ========== Auth ========== */
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    showApp();
+  }
+
+  sb.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      currentUser = session.user;
+      showApp();
+    } else {
+      currentUser = null;
+      showAuthScreen();
+    }
+  });
+}
+
+function showApp() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  loadDiaryEntries();
+  document.getElementById('userInput').focus();
+}
+
+function showAuthScreen() {
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('app').classList.remove('visible');
+}
+
+function toggleAuthMode() {
+  const form = document.getElementById('authForm');
+  const isLogin = form.dataset.mode === 'login';
+  form.dataset.mode = isLogin ? 'signup' : 'login';
+  document.getElementById('authSubmitBtn').textContent = isLogin ? '新規登録' : 'ログイン';
+  document.getElementById('authToggle').innerHTML = isLogin
+    ? 'アカウントをお持ちの方は <a href="#" onclick="toggleAuthMode();return false">ログイン</a>'
+    : '初めての方は <a href="#" onclick="toggleAuthMode();return false">新規登録</a>';
+  document.getElementById('authError').textContent = '';
+}
+
+async function handleAuth(e) {
+  e.preventDefault();
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errorEl = document.getElementById('authError');
+  const btn = document.getElementById('authSubmitBtn');
+  const mode = document.getElementById('authForm').dataset.mode;
+
+  errorEl.textContent = '';
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = '処理中...';
+
+  try {
+    let result;
+    if (mode === 'signup') {
+      result = await sb.auth.signUp({ email, password });
+    } else {
+      result = await sb.auth.signInWithPassword({ email, password });
+    }
+
+    if (result.error) {
+      errorEl.textContent = result.error.message;
+    }
+  } catch (err) {
+    errorEl.textContent = '通信エラーが発生しました';
+  }
+
+  btn.disabled = false;
+  btn.textContent = originalLabel;
+}
+
+async function logout() {
+  await sb.auth.signOut();
+  history = [];
+  diaryEntries = [];
+  childAge = null;
+  topics.clear();
+  // Reset chat UI
+  document.getElementById('messages').innerHTML = `
+    <div class="msg ai">
+      <div class="avatar">🌱</div>
+      <div class="bubble">こんにちは。育児のこと、なんでも話しかけてください。<br>質問でも、不安なことでも、ただのつぶやきでも。<br><br>お子さんは今、何ヶ月ですか？</div>
+    </div>`;
+  document.getElementById('ageBadge').textContent = '👶 月齢未設定';
+  switchTab('chat');
+}
+
+/* ========== Diary (Supabase) ========== */
+async function loadDiaryEntries() {
+  const { data, error } = await sb
+    .from('diary_entries')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!error && data) {
+    diaryEntries = data.map(e => ({
+      id: e.id,
+      date: new Date(e.created_at),
+      age: e.child_age,
+      topics: e.topics || [],
+      summary: e.summary,
+      question: e.question,
+      letter: e.letter
+    }));
+  }
+}
+
+async function saveDiaryToSupabase(entry) {
+  const { error } = await sb
+    .from('diary_entries')
+    .insert({
+      user_id: currentUser.id,
+      summary: entry.summary,
+      question: entry.question,
+      letter: entry.letter,
+      child_age: entry.age || null,
+      topics: entry.topics || []
+    });
+
+  if (error) console.warn('diary save failed', error);
+}
+
+/* ========== Tabs ========== */
+function switchTab(t) {
+  document.getElementById('tabChat').classList.toggle('active', t==='chat');
+  document.getElementById('tabDiary').classList.toggle('active', t==='diary');
+  document.getElementById('chatView').classList.toggle('active', t==='chat');
+  document.getElementById('diaryView').classList.toggle('active', t==='diary');
+  if(t==='diary') renderDiary();
+}
+
+/* ========== Chat ========== */
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleKey(e) {
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+}
+
+function appendMsg(role, text) {
+  const wrap = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `<div class="avatar">${role==='user'?'👩':'🌱'}</div><div class="bubble">${text.replace(/\n/g,'<br>')}</div>`;
+  wrap.appendChild(div);
+  div.scrollIntoView({behavior:'smooth', block:'end'});
+}
+
+function showTyping() {
+  const wrap = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className='msg ai'; div.id='typing';
+  div.innerHTML=`<div class="avatar">🌱</div><div class="bubble"><div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
+  wrap.appendChild(div);
+  div.scrollIntoView({behavior:'smooth', block:'end'});
+}
+
+function removeTyping() { const t=document.getElementById('typing'); if(t)t.remove(); }
+
+function detectContext(text) {
+  const m = text.match(/(\d+)\s*[ヶヵ]月|生後\s*(\d+)/);
+  if(m) {
+    childAge = parseInt(m[1]||m[2]);
+    document.getElementById('ageBadge').textContent = `👶 生後${childAge}ヶ月`;
+  }
+  const map = {
+    '睡眠':['眠れ','夜泣き','寝な','寝かしつけ','起き'],
+    '食事':['食べ','離乳食','ミルク','授乳','母乳'],
+    '発達':['歩','言葉','発達','できない','話さ'],
+    '体調':['熱','咳','鼻水','病院','受診'],
+    '気持ち':['不安','辛い','疲れ','しんどい','泣きそう','つらい']
+  };
+  for(const [k,vs] of Object.entries(map)){
+    if(vs.some(v=>text.includes(v))) topics.add(k);
+  }
+}
+
+async function callClaude(messages, maxTokens=1000) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: maxTokens,
+      system: SYSTEM,
+      messages
+    })
+  });
+  const data = await res.json();
+  if(data.error) throw new Error(data.error.message);
+  return data.content?.[0]?.text || '';
+}
+
+async function sendMessage() {
+  const el = document.getElementById('userInput');
+  const text = el.value.trim();
+  if(!text || busy) return;
+  el.value=''; el.style.height='auto';
+  busy=true; document.getElementById('sendBtn').disabled=true;
+
+  appendMsg('user', text);
+  detectContext(text);
+  history.push({role:'user', content:text});
+  showTyping();
+
+  try {
+    const reply = await callClaude(history);
+    removeTyping();
+    appendMsg('ai', reply);
+    history.push({role:'assistant', content:reply});
+    detectContext(reply);
+    if(history.length >= 4 && history.length % 4 === 0) await autoSave();
+  } catch(e) {
+    removeTyping();
+    appendMsg('ai', `エラーが起きました: ${e.message}`);
+  }
+
+  busy=false; document.getElementById('sendBtn').disabled=false;
+  document.getElementById('userInput').focus();
+}
+
+/* ========== Diary Save ========== */
+async function autoSave() {
+  const recent = history.slice(-6);
+  const prompt = `以下の育児相談の会話を日記エントリにしてください。JSONのみで返答（マークダウン不要）：
+{"summary":"この日感じたこと（100文字以内、親目線）","question":"今日聞いたこと（30文字以内）","letter":"子どもへの一言（40文字以内、未来の子どもへ）"}
+
+会話：
+${recent.map(m=>`${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n')}`;
+
+  try {
+    const raw = await callClaude([{role:'user',content:prompt}], 400);
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const entry = JSON.parse(clean);
+    const diaryData = {
+      age: childAge,
+      topics: Array.from(topics),
+      ...entry
+    };
+
+    // Save to Supabase
+    await saveDiaryToSupabase(diaryData);
+
+    // Reload from DB to stay in sync
+    await loadDiaryEntries();
+    topics.clear();
+  } catch(e){ console.warn('diary save failed', e); }
+}
+
+async function manualSave() {
+  const btn = document.querySelector('.save-btn');
+  if(btn){ btn.textContent='保存中...'; btn.disabled=true; }
+  await autoSave();
+  renderDiary();
+}
+
+/* ========== Diary Render ========== */
+function renderDiary() {
+  const el = document.getElementById('diaryScroll');
+  if(!diaryEntries.length){
+    el.innerHTML=`<div class="diary-empty"><div class="icon">🌸</div><p>会話すると自動で日記になります。<br><br>まず「話す」タブで<br>話しかけてみて。</p></div>`;
+    return;
+  }
+  let html = `<button class="save-btn" onclick="manualSave()">✨ 今の会話を日記に保存する</button>`;
+  diaryEntries.forEach(e => {
+    const d = e.date;
+    const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    html += `<div class="diary-entry">
+      <div class="entry-header">
+        <div class="entry-date">${ds}</div>
+        ${e.age ? `<div class="entry-age">生後${e.age}ヶ月</div>` : ''}
+      </div>
+      ${e.topics?.length ? `<div class="entry-tags">${e.topics.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
+      ${e.summary ? `<div class="entry-summary">${e.summary}</div>` : ''}
+      ${e.question ? `<div class="entry-q"><strong>きょう聞いたこと</strong>${e.question}</div>` : ''}
+      ${e.letter ? `<div class="letter-box"><div class="letter-label">TO: 未来のあなたへ</div>${e.letter}</div>` : ''}
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+/* ========== Init ========== */
+window.onload = () => {
+  initAuth();
+};
+</script>
+</body>
+</html>
