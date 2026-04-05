@@ -296,9 +296,6 @@
   .entry-summary { font-family:'Noto Serif JP',serif; font-size:13px; line-height:1.9; color:var(--text); border-left:2px solid var(--rose); padding-left:12px; margin-bottom:10px; font-weight:300; }
   .entry-q { font-size:12px; color:var(--text-light); line-height:1.6; margin-bottom:10px; }
   .entry-q strong { display:block; font-size:10px; letter-spacing:.05em; color:var(--sage); margin-bottom:4px; font-family:'Noto Sans JP',sans-serif; font-weight:500; }
-  .letter-box { margin-top:10px; padding:12px 14px; background:#FFF9F5; border:1px solid var(--border); border-radius:8px; font-family:'Noto Serif JP',serif; font-size:12px; line-height:2; color:var(--text-light); font-weight:300; }
-  .letter-label { font-size:10px; letter-spacing:.1em; color:var(--sage); margin-bottom:4px; font-style:normal; font-family:'Noto Sans JP',sans-serif; font-weight:500; }
-
   ::-webkit-scrollbar { width:0; background:transparent; }
 </style>
 </head>
@@ -490,8 +487,7 @@ async function loadDiaryEntries() {
       age: e.child_age,
       topics: e.topics || [],
       summary: e.summary,
-      question: e.question,
-      letter: e.letter
+      question: e.question
     }));
   }
 }
@@ -518,7 +514,6 @@ async function saveDiaryToSupabase(entry) {
   const row = {
     summary: entry.summary,
     question: entry.question,
-    letter: entry.letter,
     child_age: entry.age || null,
     topics: entry.topics || []
   };
@@ -647,7 +642,7 @@ async function sendMessage() {
 async function autoSave() {
   const conv = history.map(m=>`${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n');
   const prompt = `以下は今日の育児相談の会話すべてです。1日分の日記エントリとしてまとめてください。JSONのみで返答（マークダウン不要）：
-{"summary":"この日感じたこと（100文字以内、親目線）","question":"今日聞いたこと（30文字以内）","letter":"子どもへの一言（40文字以内、未来の子どもへ）"}
+{"summary":"この日感じたこと（100文字以内、親目線）","question":"今日聞いたこと（30文字以内）"}
 
 会話：
 ${conv}`;
@@ -693,7 +688,6 @@ function renderDiary() {
       ${e.topics?.length ? `<div class="entry-tags">${e.topics.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
       ${e.summary ? `<div class="entry-summary">${e.summary}</div>` : ''}
       ${e.question ? `<div class="entry-q"><strong>きょう聞いたこと</strong>${e.question}</div>` : ''}
-      ${e.letter ? `<div class="letter-box"><div class="letter-label">TO: 未来のあなたへ</div>${e.letter}</div>` : ''}
     </div>`;
   });
   el.innerHTML = html;
