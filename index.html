@@ -718,7 +718,7 @@ function appendMsg(role, text) {
   const wrap = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-  div.innerHTML = `<div class="avatar">${role==='user'?'👩':'🌱'}</div><div class="bubble">${text.replace(/\n/g,'<br>')}</div>`;
+  div.innerHTML = `<div class="avatar">${role==='user'?'👩':'🌱'}</div><div class="bubble">${text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>`;
   wrap.appendChild(div);
   requestAnimationFrame(scrollToBottom);
 }
