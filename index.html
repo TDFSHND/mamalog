@@ -467,6 +467,7 @@ let busy = false;
 let chatCount = 0;
 let currentUser = null;
 let calYear, calMonth, calSelected; // calendar state
+let sessionDate = null; // YYYY-MM-DD of current chat session
 
 /* ========== Auth ========== */
 async function initAuth() {
@@ -517,6 +518,7 @@ function showApp() {
   updateAgeBadge();
   document.getElementById('app').classList.add('visible');
   loadDiaryEntries();
+  loadChatLog();
   document.getElementById('userInput').focus();
 }
 
@@ -619,7 +621,10 @@ async function logout() {
   diaryEntries = [];
   childAge = null;
   childBirthday = null;
+  sessionDate = null;
+  chatCount = 0;
   topics.clear();
+  document.getElementById('chatCounter').textContent = '';
   // Reset chat UI
   document.getElementById('messages').innerHTML = `
     <div class="msg ai">
@@ -688,6 +693,127 @@ async function saveDiaryToSupabase(entry) {
   }
 
   if (error) console.warn('diary save failed', error);
+}
+
+/* ========== Chat Log (Supabase) ========== */
+function todayKey() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+async function loadChatLog() {
+  const today = todayKey();
+
+  // Find old logs (not today) and convert to diary
+  const { data: oldLogs } = await sb
+    .from('chat_logs')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .neq('chat_date', today);
+
+  if (oldLogs) {
+    for (const log of oldLogs) {
+      if (log.messages && log.messages.length >= 2) {
+        await autoSaveFromMessages(log.messages);
+      }
+      await sb.from('chat_logs').delete().eq('id', log.id);
+    }
+    if (oldLogs.length > 0) await loadDiaryEntries();
+  }
+
+  // Load today's log
+  const { data } = await sb
+    .from('chat_logs')
+    .select('messages')
+    .eq('user_id', currentUser.id)
+    .eq('chat_date', today)
+    .limit(1)
+    .single();
+
+  sessionDate = today;
+
+  if (data && data.messages && data.messages.length > 0) {
+    history = data.messages;
+    chatCount = history.filter(m => m.role === 'assistant').length;
+
+    // Restore UI
+    const wrap = document.getElementById('messages');
+    wrap.innerHTML = '';
+    history.forEach(m => {
+      const role = m.role === 'user' ? 'user' : 'ai';
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.innerHTML = `<div class="avatar">${role==='user'?'👩':'🌱'}</div><div class="bubble">${m.content.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')}</div>`;
+      wrap.appendChild(div);
+    });
+    requestAnimationFrame(scrollToBottom);
+
+    if (chatCount > 0) {
+      document.getElementById('chatCounter').textContent = `今日 ${chatCount}回話しました`;
+    }
+
+    // Restore topics
+    history.forEach(m => detectContext(m.content));
+  }
+}
+
+async function saveChatLog() {
+  const today = todayKey();
+  if (sessionDate !== today) {
+    // Date changed mid-session: save old history as diary, start fresh
+    if (history.length >= 2) {
+      await autoSaveFromMessages(history);
+      await loadDiaryEntries();
+    }
+    await sb.from('chat_logs').delete().eq('user_id', currentUser.id).eq('chat_date', sessionDate);
+    sessionDate = today;
+    history = [];
+    chatCount = 0;
+    document.getElementById('chatCounter').textContent = '';
+    document.getElementById('messages').innerHTML = `
+      <div class="msg ai">
+        <div class="avatar">🌱</div>
+        <div class="bubble">こんにちは。育児のこと、なんでも話しかけてください。<br>質問でも、不安なことでも、ただのつぶやきでも。</div>
+      </div>`;
+    return;
+  }
+
+  await sb
+    .from('chat_logs')
+    .upsert({
+      user_id: currentUser.id,
+      chat_date: today,
+      messages: history
+    }, { onConflict: 'user_id,chat_date' });
+}
+
+async function autoSaveFromMessages(msgs) {
+  const conv = msgs.map(m => `${m.role==='user'?'親':'AI'}: ${m.content}`).join('\n');
+  const prompt = `以下は今日の育児相談の会話すべてです。1日分の日記エントリとしてまとめてください。JSONのみで返答（マークダウン不要）：
+{"summary":"この日感じたこと（100文字以内、親目線）","question":"今日聞いたこと（30文字以内）"}
+
+会話：
+${conv}`;
+
+  try {
+    const raw = await callClaude([{role:'user',content:prompt}], 400);
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const entry = JSON.parse(clean);
+    const tps = new Set();
+    const tMap = {
+      '睡眠':['眠れ','夜泣き','寝な','寝かしつけ','起き'],
+      '食事':['食べ','離乳食','ミルク','授乳','母乳'],
+      '発達':['歩','言葉','発達','できない','話さ'],
+      '体調':['熱','咳','鼻水','病院','受診'],
+      '気持ち':['不安','辛い','疲れ','しんどい','泣きそう','つらい']
+    };
+    msgs.forEach(m => {
+      for (const [k,vs] of Object.entries(tMap)) {
+        if (vs.some(v => m.content.includes(v))) tps.add(k);
+      }
+    });
+    await saveDiaryToSupabase({ age: childAge, topics: Array.from(tps), ...entry });
+  } catch(e) { console.warn('auto diary from old log failed', e); }
 }
 
 /* ========== Tabs ========== */
@@ -782,6 +908,7 @@ async function sendMessage() {
     chatCount++;
     document.getElementById('chatCounter').textContent = `今日 ${chatCount}回話しました`;
     detectContext(reply);
+    await saveChatLog();
     if(history.length >= 2) await autoSave();
   } catch(e) {
     removeTyping();
