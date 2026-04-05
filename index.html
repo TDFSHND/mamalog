@@ -268,21 +268,54 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-    padding: 16px 12px;
+    padding: 12px;
   }
-  .diary-empty { text-align:center; padding:60px 20px; color:var(--text-light); }
+  .diary-empty { text-align:center; padding:40px 20px; color:var(--text-light); }
   .diary-empty .icon { font-size:40px; margin-bottom:12px; }
   .diary-empty p { font-size:13px; line-height:1.8; }
-  .save-btn {
-    width:100%; padding:14px;
-    background:var(--blush);
-    border:1px dashed var(--rose); border-radius:10px;
-    color:var(--rose-deep); font-family:'Noto Sans JP',sans-serif;
-    font-size:13px; cursor:pointer; margin-bottom:16px;
-    min-height:48px;
+
+  /* Calendar */
+  .cal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .cal-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 17px; color: var(--rose-deep);
+  }
+  .cal-nav {
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--warm-white);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; color: var(--text-light);
     touch-action: manipulation;
   }
-  .save-btn:disabled { opacity:.6; cursor:not-allowed; }
+  .cal-nav:active { background: var(--blush); }
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 2px; margin-bottom: 16px;
+  }
+  .cal-dow {
+    text-align: center; font-size: 10px; color: var(--text-light);
+    padding: 4px 0; font-weight: 500;
+  }
+  .cal-day {
+    aspect-ratio: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 10px; font-size: 13px; color: var(--text);
+    cursor: pointer; position: relative;
+    touch-action: manipulation;
+  }
+  .cal-day.other { color: var(--border); }
+  .cal-day.today { background: var(--blush); font-weight: 500; }
+  .cal-day.selected { background: var(--rose-deep); color: white; }
+  .cal-day.selected .cal-dot { background: white; }
+  .cal-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--rose); position: absolute; bottom: 4px;
+  }
+
+  /* Entry detail */
   .diary-entry {
     background:var(--warm-white); border:1px solid var(--border);
     border-radius:12px; padding:16px; margin-bottom:14px;
@@ -296,6 +329,7 @@
   .entry-summary { font-family:'Noto Serif JP',serif; font-size:13px; line-height:1.9; color:var(--text); border-left:2px solid var(--rose); padding-left:12px; margin-bottom:10px; font-weight:300; }
   .entry-q { font-size:12px; color:var(--text-light); line-height:1.6; margin-bottom:10px; }
   .entry-q strong { display:block; font-size:10px; letter-spacing:.05em; color:var(--sage); margin-bottom:4px; font-family:'Noto Sans JP',sans-serif; font-weight:500; }
+  .no-entry { text-align:center; padding:20px; color:var(--text-light); font-size:13px; }
   ::-webkit-scrollbar { width:0; background:transparent; }
 </style>
 </head>
@@ -382,6 +416,7 @@ let childAge = null;
 let topics = new Set();
 let busy = false;
 let currentUser = null;
+let calYear, calMonth, calSelected; // calendar state
 
 /* ========== Auth ========== */
 async function initAuth() {
@@ -669,17 +704,89 @@ async function manualSave() {
   renderDiary();
 }
 
-/* ========== Diary Render ========== */
+/* ========== Diary Render (Calendar) ========== */
+function entryDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function buildEntryMap() {
+  const map = {};
+  diaryEntries.forEach(e => { map[entryDateKey(e.date)] = e; });
+  return map;
+}
+
+function changeMonth(delta) {
+  calMonth += delta;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  calSelected = null;
+  renderDiary();
+}
+
+function selectDay(key) {
+  calSelected = key;
+  renderDiary();
+}
+
 function renderDiary() {
   const el = document.getElementById('diaryScroll');
-  if(!diaryEntries.length){
-    el.innerHTML=`<div class="diary-empty"><div class="icon">🌸</div><p>会話すると自動で日記になります。<br><br>まず「話す」タブで<br>話しかけてみて。</p></div>`;
-    return;
+  if (!calYear) {
+    const now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth();
   }
-  let html = `<button class="save-btn" onclick="manualSave()">✨ 今の会話を日記に保存する</button>`;
-  diaryEntries.forEach(e => {
+
+  const map = buildEntryMap();
+  const today = entryDateKey(new Date());
+  const dows = ['日','月','火','水','木','金','土'];
+
+  // First day / last day of current month
+  const first = new Date(calYear, calMonth, 1);
+  const last = new Date(calYear, calMonth + 1, 0);
+  const startDow = first.getDay();
+
+  let html = `
+    <div class="cal-header">
+      <button class="cal-nav" onclick="changeMonth(-1)">◀</button>
+      <div class="cal-title">${calYear}年${calMonth+1}月</div>
+      <button class="cal-nav" onclick="changeMonth(1)">▶</button>
+    </div>
+    <div class="cal-grid">
+      ${dows.map(d => `<div class="cal-dow">${d}</div>`).join('')}`;
+
+  // Previous month padding
+  const prevLast = new Date(calYear, calMonth, 0).getDate();
+  for (let i = startDow - 1; i >= 0; i--) {
+    const day = prevLast - i;
+    html += `<div class="cal-day other">${day}</div>`;
+  }
+
+  // Current month days
+  for (let d = 1; d <= last.getDate(); d++) {
+    const key = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const hasEntry = map[key];
+    const isToday = key === today;
+    const isSel = key === calSelected;
+    const cls = ['cal-day'];
+    if (isToday) cls.push('today');
+    if (isSel) cls.push('selected');
+    html += `<div class="${cls.join(' ')}" onclick="selectDay('${key}')">${d}${hasEntry ? '<div class="cal-dot"></div>' : ''}</div>`;
+  }
+
+  // Next month padding
+  const totalCells = startDow + last.getDate();
+  const remaining = (7 - totalCells % 7) % 7;
+  for (let i = 1; i <= remaining; i++) {
+    html += `<div class="cal-day other">${i}</div>`;
+  }
+
+  html += '</div>';
+
+  // Show selected day's entry
+  if (calSelected && map[calSelected]) {
+    const e = map[calSelected];
     const d = e.date;
-    const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
     html += `<div class="diary-entry">
       <div class="entry-header">
         <div class="entry-date">${ds}</div>
@@ -689,7 +796,10 @@ function renderDiary() {
       ${e.summary ? `<div class="entry-summary">${e.summary}</div>` : ''}
       ${e.question ? `<div class="entry-q"><strong>きょう聞いたこと</strong>${e.question}</div>` : ''}
     </div>`;
-  });
+  } else if (calSelected) {
+    html += '<div class="no-entry">この日の日記はありません</div>';
+  }
+
   el.innerHTML = html;
 }
 
