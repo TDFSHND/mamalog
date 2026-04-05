@@ -199,6 +199,13 @@
   .view.active { display: flex; }
 
   /* CHAT */
+  .chat-counter {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-light);
+    padding: 6px 0 0;
+    flex-shrink: 0;
+  }
   .messages {
     flex: 1;
     overflow-y: auto;
@@ -409,6 +416,7 @@
   </div>
 
   <div class="view active" id="chatView">
+    <div class="chat-counter" id="chatCounter"></div>
     <div class="messages" id="messages">
       <div class="msg ai">
         <div class="avatar">🌱</div>
@@ -456,6 +464,7 @@ let childAge = null;
 let childBirthday = null;
 let topics = new Set();
 let busy = false;
+let chatCount = 0;
 let currentUser = null;
 let calYear, calMonth, calSelected; // calendar state
 
@@ -770,6 +779,8 @@ async function sendMessage() {
     removeTyping();
     appendMsg('ai', reply);
     history.push({role:'assistant', content:reply});
+    chatCount++;
+    document.getElementById('chatCounter').textContent = `今日 ${chatCount}回話しました`;
     detectContext(reply);
     if(history.length >= 2) await autoSave();
   } catch(e) {
