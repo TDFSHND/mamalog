@@ -436,7 +436,7 @@
     <div class="diary-scroll" id="diaryScroll">
       <div class="diary-empty">
         <div class="icon">🌸</div>
-        <p>会話が一定の量に達すると<br>日記が自動的に生成されます。<br><br>まず「話す」タブで<br>話しかけてみて。</p>
+        <p>話した内容が<br>自動で日記になります。<br><br>まず「話す」タブで<br>話しかけてみて。</p>
       </div>
     </div>
   </div>
@@ -909,7 +909,7 @@ async function sendMessage() {
     document.getElementById('chatCounter').textContent = `今日 ${chatCount}回話しました`;
     detectContext(reply);
     await saveChatLog();
-    if(history.filter(m=>m.role==='user').length >= 3) await autoSave();
+    if(history.length >= 2) await autoSave();
   } catch(e) {
     removeTyping();
     appendMsg('ai', `エラーが起きました: ${e.message}`);
@@ -1043,7 +1043,7 @@ function renderDiary() {
       ${e.question ? `<div class="entry-q"><strong>きょう聞いたこと</strong>${e.question}</div>` : ''}
     </div>`;
   } else if (calSelected) {
-    html += '<div class="no-entry">会話が一定量に達すると日記が生成されます</div>';
+    html += '<div class="no-entry">この日の日記はまだありません</div>';
   }
 
   el.innerHTML = html;
